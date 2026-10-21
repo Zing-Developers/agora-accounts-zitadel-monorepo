@@ -1,0 +1,26 @@
+# Apaga o ramo de um PR mergido. Os ramos de longa duração ficam sempre.
+# Regra do agora-workspace (tools/github/regras-repos.sh): repos com qa/production não ligam o
+# auto-delete do GitHub, porque apagaria a qa no merge de qa→production.
+name: apagar-ramo
+on:
+  pull_request:
+    types: [closed]
+permissions:
+  contents: write
+  pull-requests: read
+jobs:
+  apagar:
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !contains(fromJSON('["develop","qa","production","main","master"]'), github.event.pull_request.head.ref)
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          if [ "$(gh pr list -R "$GITHUB_REPOSITORY" --base "$REF" --state open --json number -q length)" != "0" ]; then
+            echo "$REF é base de um PR aberto, fica"; exit 0
+          fi
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$REF" || echo "$REF já não existe"
